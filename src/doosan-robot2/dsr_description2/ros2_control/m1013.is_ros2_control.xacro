@@ -1,0 +1,102 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro">
+
+  <xacro:macro name="m1013_isaac_ros2_control" params="
+    model:=m1013
+    joint_commands_topic:=/isaac_joint_commands
+    joint_states_topic:=/isaac_joint_states
+  ">
+
+    <ros2_control name="${model}" type="system">
+      <hardware>
+        <plugin>topic_based_ros2_control/TopicBasedSystem</plugin>
+        <param name="joint_commands_topic">${joint_commands_topic}</param>
+        <param name="joint_states_topic">${joint_states_topic}</param>
+
+        <!-- 필요 시(버전에 따라) 아래 파라미터가 추가로 필요한 경우가 있습니다.
+             일단은 위 2개 토픽만 맞추면 대부분 동작합니다. -->
+        <!-- <param name="use_stamped_commands">false</param> -->
+      </hardware>
+
+      <joint name="joint_1">
+        <command_interface name="position">
+          <param name="min">${-2*pi}</param>
+          <param name="max">${ 2*pi}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="joint_2">
+        <command_interface name="position">
+          <param name="min">${-2*pi}</param>
+          <param name="max">${ 2*pi}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="joint_3">
+        <command_interface name="position">
+          <param name="min">${-pi}</param>
+          <param name="max">${ pi}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="joint_4">
+        <command_interface name="position">
+          <param name="min">${-2*pi}</param>
+          <param name="max">${ 2*pi}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="joint_5">
+        <command_interface name="position">
+          <param name="min">${-2*pi}</param>
+          <param name="max">${ 2*pi}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+
+      <joint name="joint_6">
+        <command_interface name="position">
+          <param name="min">${-2*pi}</param>
+          <param name="max">${ 2*pi}</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.0</param>
+        </state_interface>
+        <state_interface name="velocity"/>
+      </joint>
+      <joint name="robotiq_hande_left_finger_joint">
+        <command_interface name="position">
+          <param name="min">0</param>
+          <param name="max">0.025</param>
+        </command_interface>
+        <state_interface name="position">
+          <param name="initial_value">0.025</param>
+        </state_interface>
+        <state_interface name="velocity">
+          <param name="initial_value">0</param>
+        </state_interface>
+      </joint>
+    </ros2_control>
+
+  </xacro:macro>
+
+</robot>

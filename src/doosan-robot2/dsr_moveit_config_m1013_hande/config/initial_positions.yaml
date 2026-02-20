@@ -1,0 +1,11 @@
+# Default initial positions for m1013_hande's ros2_control fake system
+
+initial_positions:
+  joint_1: 0
+  joint_2: 0
+  joint_3: 0
+  joint_4: 0
+  joint_5: 0
+  joint_6: 0
+  robotiq_hande_left_finger_joint: 0
+  robotiq_hande_right_finger_joint: 0

@@ -1,0 +1,85 @@
+<?xml version="1.0"?>
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="m1013_hande">
+
+    <xacro:arg name="use_gazebo" default="false"/>
+    <xacro:arg name="use_isaac"  default="true"/>
+    <xacro:arg name="use_real"   default="false"/>
+    
+    <xacro:arg name="name" default="dsr01"/>
+    <xacro:arg name="host" default="192.168.56.1"/>
+    <xacro:arg name="port" default="12345"/>
+    <xacro:arg name="update_rate" default="100"/>
+    <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
+
+    <xacro:arg name="gripper_name" default="robotiq_hande"/>
+    <xacro:arg name="gripper_prefix" default=""/>
+    <xacro:arg name="gripper_tty_port" default="/dev/ttyUSB0"/> <xacro:arg name="gripper_baudrate" default="115200"/>
+    <xacro:arg name="gripper_slave_id" default="9"/>
+    <xacro:arg name="use_fake_gripper" default="false"/>
+
+    <xacro:property name="update_rate" value="$(arg update_rate)"/>
+    <xacro:property name="gz"          value="$(arg use_gazebo)"/>
+    <xacro:property name="use_isaac"   value="$(arg use_isaac)"/>
+    <xacro:property name="use_real"    value="$(arg use_real)"/>
+    <xacro:property name="initial_positions_file" value="$(arg initial_positions_file)"/>
+
+
+    <xacro:include filename="$(find dsr_description2)/xacro/m1013_hande.urdf.xacro" />
+
+
+    <xacro:unless value="${gz or use_isaac or use_real}">
+        <xacro:include filename="m1013_hande.ros2_control.xacro"/>
+        <xacro:m1013_hande_ros2_control
+            name="FakeSystem"
+            initial_positions_file="${initial_positions_file}"/>
+    </xacro:unless>
+
+    <xacro:if value="${gz}">
+        <xacro:include filename="$(find dsr_moveit_config_m1013_hande)/config/m1013_hande.gz_control.xacro"/>
+        <xacro:m1013_hande_gz_ros2_control
+            name="GazeboSimSystem"
+            initial_positions_file="${initial_positions_file}"/>
+    </xacro:if>
+
+    <xacro:if value="${use_isaac}">
+        <xacro:include filename="$(find dsr_description2)/ros2_control/m1013.is_ros2_control.xacro"/>
+        <xacro:m1013_isaac_ros2_control 
+            model="m1013"
+            joint_commands_topic="/isaac_joint_commands"
+            joint_states_topic="/isaac_joint_states"
+        />
+    </xacro:if>
+
+    <xacro:if value="${use_real}">
+        <xacro:include filename="$(find dsr_description2)/ros2_control/m1013.ros2_control.xacro"/>
+        <xacro:m1013_ros2_control 
+            name="$(arg name)"
+            host="$(arg host)"
+            rt_host="$(arg host)"
+            port="$(arg port)"
+            mode="real"
+            model="m1013"
+            update_rate="$(arg update_rate)"
+        />
+
+        <xacro:include filename="$(find robotiq_hande_description)/urdf/robotiq_hande_gripper.ros2_control.xacro"/>
+        <xacro:robotiq_hande_ros2_control
+            name="$(arg gripper_name)"
+            prefix="$(arg gripper_prefix)"
+            grip_pos_min="0.0"
+            grip_pos_max="0.05"
+            tty_port="$(arg gripper_tty_port)"
+            baudrate="$(arg gripper_baudrate)"
+            parity="none"
+            data_bits="8"
+            stop_bit="1"
+            slave_id="$(arg gripper_slave_id)"
+            frequency_hz="10.0"
+            create_socat_tty="false"
+            socat_ip_address="192.168.1.1"
+            socat_port="33333"
+            use_fake_hardware="false"
+        />
+    </xacro:if>
+
+</robot>

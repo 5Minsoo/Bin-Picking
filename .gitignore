@@ -1,0 +1,34 @@
+# ===== ROS2 / colcon =====
+build/
+install/
+log/
+
+# ===== Python =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+
+# ===== VSCode =====
+.vscode/
+*.code-workspace
+.vscode-server/
+
+# ===== JetBrains =====
+.idea/
+
+# ===== OS =====
+.DS_Store
+Thumbs.db
+
+# ===== CMake =====
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+Makefile
+
+# ===== ROS bags =====
+*.db3
+*.bag
+
+bin_picking/moveit2/

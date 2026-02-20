@@ -1,0 +1,25 @@
+moveit_setup_assistant_config:
+  urdf:
+    package: dsr_description2
+    relative_path: xacro/m1013_hande.urdf.xacro
+  srdf:
+    relative_path: config/m1013_hande.srdf
+  package_settings:
+    author_name: Minsoo
+    author_email: minsoo5849@gmail.com
+    generated_timestamp: 1770176289
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
+  modified_urdf:
+    xacros:
+      - control_xacro
+  control_xacro:
+    command:
+      - position
+    state:
+      - position
+      - velocity
