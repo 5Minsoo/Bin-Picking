@@ -2,18 +2,19 @@
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="m1013_hande">
 
     <xacro:arg name="use_gazebo" default="false"/>
-    <xacro:arg name="use_isaac"  default="true"/>
-    <xacro:arg name="use_real"   default="false"/>
-    
+    <xacro:arg name="use_isaac"  default="false"/>
+    <xacro:arg name="use_real"   default="true"/>
+    <xacro:arg name="use_rviz"   default="false"/> 
     <xacro:arg name="name" default="dsr01"/>
-    <xacro:arg name="host" default="192.168.56.1"/>
+    <xacro:arg name="host" default="192.168.137.100"/>
     <xacro:arg name="port" default="12345"/>
     <xacro:arg name="update_rate" default="100"/>
     <xacro:arg name="initial_positions_file" default="initial_positions.yaml" />
 
     <xacro:arg name="gripper_name" default="robotiq_hande"/>
     <xacro:arg name="gripper_prefix" default=""/>
-    <xacro:arg name="gripper_tty_port" default="/dev/ttyUSB0"/> <xacro:arg name="gripper_baudrate" default="115200"/>
+    <xacro:arg name="gripper_tty_port" default="/dev/ttyUSB0"/> 
+    <xacro:arg name="gripper_baudrate" default="115200"/>
     <xacro:arg name="gripper_slave_id" default="9"/>
     <xacro:arg name="use_fake_gripper" default="false"/>
 
@@ -21,6 +22,7 @@
     <xacro:property name="gz"          value="$(arg use_gazebo)"/>
     <xacro:property name="use_isaac"   value="$(arg use_isaac)"/>
     <xacro:property name="use_real"    value="$(arg use_real)"/>
+    <xacro:property name="use_rviz"    value="$(arg use_rviz)"/>
     <xacro:property name="initial_positions_file" value="$(arg initial_positions_file)"/>
 
 
@@ -76,10 +78,67 @@
             slave_id="$(arg gripper_slave_id)"
             frequency_hz="10.0"
             create_socat_tty="false"
-            socat_ip_address="192.168.1.1"
-            socat_port="33333"
+            socat_ip_address="192.168.137.100"
+            socat_port="54321"
             use_fake_hardware="false"
         />
     </xacro:if>
+    <xacro:if value="${use_rviz}">
+        <ros2_control name="RVizFakeSystem" type="system">
+            <hardware>
+                <plugin>mock_components/GenericSystem</plugin>
+            </hardware>
 
+            <joint name="joint_1">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                    <param name="initial_value">0.0</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="joint_2">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                    <param name="initial_value">0.0</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="joint_3">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                    <param name="initial_value">1.57</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="joint_4">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                    <param name="initial_value">0.0</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="joint_5">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                    <param name="initial_value">1.57</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+            <joint name="joint_6">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                    <param name="initial_value">0.0</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+
+            <joint name="robotiq_hande_left_finger_joint">
+                <command_interface name="position"/>
+                <state_interface name="position">
+                    <param name="initial_value">0.0</param>
+                </state_interface>
+                <state_interface name="velocity"/>
+            </joint>
+        </ros2_control>
+    </xacro:if>
 </robot>

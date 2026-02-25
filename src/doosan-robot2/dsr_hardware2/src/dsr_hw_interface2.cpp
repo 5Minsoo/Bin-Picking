@@ -396,7 +396,7 @@ return_type DRHWInterface::write(const rclcpp::Time &, const rclcpp::Duration &d
     if (mode == "real" && desired_period > 0.0)
     {
         double min_dt = desired_period * 0.3;
-        double max_dt = desired_period * 1.5;
+        double max_dt = desired_period * 20; //3333333333333333333333333333333333333333333333333
 
         if (dt_sec < min_dt || dt_sec > max_dt)
         {

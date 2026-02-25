@@ -34,8 +34,9 @@ setup(
                             'entities_to_rviz_markers=utils.entities_to_rviz_markers:main',
                             'pick_block=utils.pick_block:main',
                             "total_debug=utils.total_debug:main",
-                            'planning_debug=utils.planning_debug:main'
-
+                            'planning_debug=utils.planning_debug:main',
+                            'box_detect=utils.box_detect:main',
+                            'real_scene=utils.planning_scene_real:main'
         ],
     },
 )

@@ -36,6 +36,10 @@ class MoveItMoveHelper(Node):
         self.BASE_FRAME = "base_link"
         self.GROUP_NAME = "manipulator"
         self.EE_LINK = "link_6"
+        self.JOINT_NAMES = [
+            "joint_1", "joint_2", "joint_3",
+            "joint_4", "joint_5", "joint_6",
+        ]
 
         self.MOVE_ACTION_NAME = "/move_action"
         self.EXEC_ACTION_NAME = "/execute_trajectory"
@@ -45,6 +49,33 @@ class MoveItMoveHelper(Node):
         self.move_ac = ActionClient(self, MoveGroup, self.MOVE_ACTION_NAME)
         self.exec_ac = ActionClient(self, ExecuteTrajectory, self.EXEC_ACTION_NAME)
         self.cart_cli = self.create_client(GetCartesianPath, self.CART_SERVICE_NAME)
+
+        # joint_states 구독 (RRT* path constraint용)
+        self._latest_joint_state: Optional[JointState] = None
+        self._js_sub = self.create_subscription(
+            JointState, "/joint_states", self._joint_state_cb, 10
+        )
+
+    # ============================================================
+    # joint_states 콜백 & 현재 관절값 조회
+    # ============================================================
+    def _joint_state_cb(self, msg: JointState):
+        self._latest_joint_state = msg
+
+    def current_joint_positions(self) -> Dict[str, float]:
+        """현재 관절값을 {name: rad} dict로 반환. 토픽 수신 전이면 spin으로 대기."""
+        if self._latest_joint_state is None:
+            self.get_logger().info("Waiting for /joint_states ...")
+            for _ in range(50):  # 최대 5초 대기
+                rclpy.spin_once(self, timeout_sec=0.1)
+                if self._latest_joint_state is not None:
+                    break
+            if self._latest_joint_state is None:
+                self.get_logger().error("No /joint_states received")
+                return {n: 0.0 for n in self.JOINT_NAMES}
+
+        js = self._latest_joint_state
+        return {n: p for n, p in zip(js.name, js.position)}
 
     # ============================================================
     # [NEW] 내부 헬퍼: 입력 데이터(List/Numpy/Msg) -> PoseStamped 변환
@@ -83,10 +114,11 @@ class MoveItMoveHelper(Node):
         """PoseStamped가 아닌 순수 Pose 메시지 생성 (Cartesian Waypoints용)"""
         return self._build_pose_stamped(xyz, quat).pose
 
+
     # ============================================================
-    # (1) OMPL 이동 (MoveGroup) - 인터페이스 변경
+    # (1) RRT* 이동 (MoveGroup) - Joint6 ±90° 제한
     # ============================================================
-    def move_ompl_to_pose(
+    def move_rrtstar_to_pose(
         self,
         xyz,
         quat,
@@ -96,82 +128,135 @@ class MoveItMoveHelper(Node):
         vel_scale: float = 0.3,
         acc_scale: float = 0.3,
         pos_tol: float = 0.003,
-        ori_tol: float = 0.05
+        ori_tol: float = 0.05,
     ) -> bool:
         """
+        RRT* 플래너를 사용하여 목표 pose로 이동.
+        6번 관절(마지막 관절)은 현재 값 기준 ±90°로 제한.
+
         Args:
             xyz: [x,y,z] or Point
             quat: [x,y,z,w] or Quaternion
-            collision: OMPL에서는 기본적으로 True(충돌 회피). False 설정 시 경고 로그(OMPL은 PlanningScene 조작 없이는 충돌 무시가 어려움)
+            collision: True(충돌 회피). False 설정 시 경고만 출력.
         """
         target_pose_stamped = self._build_pose_stamped(xyz, quat)
 
-        # OMPL Plan
-        traj = self.plan_ompl_to_pose(
+        traj = self.plan_rrtstar_to_pose(
             target_pose_stamped,
-            planning_time, attempts, vel_scale, acc_scale, pos_tol, ori_tol
+            planning_time, attempts, vel_scale, acc_scale, pos_tol, ori_tol,
         )
-        
         if traj is None:
             return False
-        
-        # Execute
+
         return self.execute_trajectory(traj)
 
-    def plan_ompl_to_pose(
+
+    def plan_rrtstar_to_pose(
         self,
         target: PoseStamped,
         planning_time: float = 2.0,
         attempts: int = 5,
-        vel_scale: float = 0.3,
-        acc_scale: float = 0.3,
+        vel_scale: float = 0.1,
+        acc_scale: float = 0.1,
         pos_tol: float = 0.003,
         ori_tol: float = 0.05,
         start_state: Optional[RobotState] = None,
     ) -> Optional[RobotTrajectory]:
-        
+        """
+        RRT* 플래너로 plan_only 수행.
+        6번 관절은 현재 관절값 ± π/2 (90°) 이내로 path constraint 적용.
+        """
         if not self.move_ac.wait_for_server(timeout_sec=2.0):
             self.get_logger().error("MoveGroup action server not available")
             return None
 
+        # ----------------------------------------------------------
+        # 현재 6번 관절값 조회 (joint_states 토픽 기반)
+        # self.JOINT_NAMES: 그룹 내 관절 이름 리스트
+        # self.current_joint_positions(): 현재 관절값 dict 반환 가정
+        # ----------------------------------------------------------
+        joint6_name = self.JOINT_NAMES[-1]  # 마지막(6번) 관절 이름
+        cur_joints = self.current_joint_positions()  # {name: rad, ...}
+        joint6_cur = cur_joints[joint6_name]
+
+        JOINT6_RANGE = math.pi / 2.0  # ±90°
+
+        # ----------------------------------------------------------
+        # Goal 메시지 구성
+        # ----------------------------------------------------------
         goal = MoveGroup.Goal()
         req = goal.request
+
         req.group_name = self.GROUP_NAME
         req.num_planning_attempts = int(attempts)
         req.allowed_planning_time = float(planning_time)
         req.max_velocity_scaling_factor = float(vel_scale)
         req.max_acceleration_scaling_factor = float(acc_scale)
 
+        # ★ RRT* 플래너 지정
+        req.planner_id = "RRTstarkConfigDefault"
+
+        # start state
         if start_state is None:
             req.start_state = RobotState()
             req.start_state.is_diff = True
         else:
             req.start_state = start_state
 
-        # Constraint 생성 로직 내부 호출
-        req.goal_constraints = [self._make_pose_goal_constraints(target, pos_tol, ori_tol)]
+        # ----------------------------------------------------------
+        # Goal Constraints (기존 pose goal)
+        # ----------------------------------------------------------
+        req.goal_constraints = [
+            self._make_pose_goal_constraints(target, pos_tol, ori_tol)
+        ]
 
+        # ----------------------------------------------------------
+        # Path Constraints: Joint6 ±90° 제한
+        # ----------------------------------------------------------
+        jc = JointConstraint()
+        jc.joint_name = joint6_name
+        jc.position = joint6_cur               # 기준: 현재 관절값
+        jc.tolerance_above = JOINT6_RANGE      # +90°
+        jc.tolerance_below = JOINT6_RANGE      # -90°
+        jc.weight = 1.0
+
+        path_constraints = Constraints()
+        path_constraints.name = "joint6_limit"
+        path_constraints.joint_constraints.append(jc)
+        req.path_constraints = path_constraints
+
+        # ----------------------------------------------------------
+        # Planning options
+        # ----------------------------------------------------------
         goal.planning_options.plan_only = True
         goal.planning_options.look_around = False
         goal.planning_options.replan = False
 
+        # ----------------------------------------------------------
+        # Send & Wait
+        # ----------------------------------------------------------
         fut = self.move_ac.send_goal_async(goal)
         rclpy.spin_until_future_complete(self, fut, timeout_sec=5.0)
-        
         if not fut.done() or fut.result() is None:
+            self.get_logger().error("RRT* goal send failed")
             return None
+
         gh = fut.result()
         if not gh.accepted:
+            self.get_logger().error("RRT* goal rejected")
             return None
 
         res_fut = gh.get_result_async()
-        rclpy.spin_until_future_complete(self, res_fut, timeout_sec=planning_time + 5.0)
-        
+        rclpy.spin_until_future_complete(
+            self, res_fut, timeout_sec=planning_time + 5.0
+        )
         if not res_fut.done() or res_fut.result() is None:
+            self.get_logger().error("RRT* planning timed out")
             return None
 
         traj = getattr(res_fut.result().result, "planned_trajectory", None)
         if traj is None or not traj.joint_trajectory.points:
+            self.get_logger().warn("RRT* returned empty trajectory")
             return None
 
         return traj

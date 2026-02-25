@@ -38,7 +38,7 @@ LINK_NAME = "link_6"
 BASE_FRAME = "base_link"
 GRIPPER_TOPIC = "/gripper_controller/gripper_cmd"
 
-GRIPPER_OPEN  = 0.025
+GRIPPER_OPEN  = 0.05
 GRIPPER_CLOSE = 0.00
 
 OFFSET_DIST   = 0.3
@@ -83,14 +83,22 @@ class SmartGraspNode(Node):
                 [ori_dict["x"], ori_dict["y"], ori_dict["z"], ori_dict["w"]]
             ).as_matrix()
 
+            # self.helper.move_to_joint_values(joint_goal = {
+            #                 "joint_1": 1.622,
+            #                 "joint_2": 0.4357,
+            #                 "joint_4": 3.0167,
+            #                 "joint_5": -1.278,
+            #                 "joint_3": 1.4254,
+            #                 "joint_6": 0.0
+            #             })
             self.helper.move_to_joint_values(joint_goal = {
-                            "joint_1": 1.622,
-                            "joint_2": 0.4357,
-                            "joint_4": 3.0167,
-                            "joint_5": -1.278,
-                            "joint_3": 1.4254,
-                            "joint_6": 0.0
-                        })
+                "joint_1": -0.901378,
+                "joint_2": 0.064557,
+                "joint_3": 1.855237,
+                "joint_4": 0.057761,
+                "joint_5": 1.069546,
+                "joint_6": -0.000044
+            })
             self.get_logger().info(f"Target Received: {status}")
             self.last_status=status
             success = False
@@ -110,12 +118,12 @@ class SmartGraspNode(Node):
                 success = self.handle_lying(center_pos, rot_mat)
             time.sleep(0.3)
             
-            if success:
-                self.get_logger().info(">>> 작업 성공 <<<")
-                self.handle_convey(convey_pos=np.array([0.5, 0.0, 0.3]), grasp_quat=np.array([0.0,1.0,0.0,0.0]))
-                time.sleep(2.0)
-            else:
-                self.get_logger().error(">>> 작업 실패 <<<")
+            # if success:
+            #     self.get_logger().info(">>> 작업 성공 <<<")
+            #     self.handle_convey(convey_pos=np.array([0.5, 0.0, 0.3]), grasp_quat=np.array([0.0,1.0,0.0,0.0]))
+            #     time.sleep(2.0)
+            # else:
+            #     self.get_logger().error(">>> 작업 실패 <<<")
 
         except Exception as e:
             self.get_logger().error(f"Logic Error: {e}")

@@ -25,11 +25,12 @@ def generate_launch_description():
         DeclareLaunchArgument('port', default_value='12345', description='ROBOT_PORT'),
         DeclareLaunchArgument('use_gazebo', default_value='false', description='Start Gazebo'),
         DeclareLaunchArgument('use_isaac', default_value='false', description='Start Isaac Sim'),
-        DeclareLaunchArgument('use_real', default_value='true', description='Use Real Robot'),
+        DeclareLaunchArgument('use_real', default_value='false', description='Use Real Robot'),
+        DeclareLaunchArgument('use_rviz', default_value='false', description='Use Real Robot'),
         DeclareLaunchArgument(
             'use_sim_time',
             default_value=PythonExpression([
-                '"false" if "', LaunchConfiguration('use_real'), '" == "true" else "true"'
+                '"false" if "', LaunchConfiguration('use_real'), '" == "true" or "', LaunchConfiguration('use_rviz'), '" == "true" else "true"'
             ]),
             description='Use sim time'
         ),
@@ -45,11 +46,12 @@ def generate_launch_description():
     use_sim_time = LaunchConfiguration('use_sim_time')
     use_real = LaunchConfiguration('use_real')
     use_gazebo = LaunchConfiguration('use_gazebo')
-    
+    use_rviz = LaunchConfiguration('use_rviz')
+    use_isaac = LaunchConfiguration('use_isaac')
     # 2. MoveIt Configuration
     moveit_config = (
         MoveItConfigsBuilder("m1013_hande", package_name="dsr_moveit_config_m1013_hande")
-        .robot_description(file_path="config/m1013_hande.urdf.xacro")
+        .robot_description(file_path="config/m1013_hande.urdf.xacro",mappings={"use_gazebo":use_gazebo,"use_real":use_real,"use_rviz":use_rviz,"use_isaac":use_isaac})
         .robot_description_semantic(file_path="config/m1013_hande.srdf")
         .trajectory_execution(file_path="config/moveit_controllers.yaml")
         .to_moveit_configs()
@@ -65,6 +67,7 @@ def generate_launch_description():
             "use_gazebo:=", LaunchConfiguration('use_gazebo'), " ",
             "use_isaac:=", LaunchConfiguration('use_isaac'), " ",
             "use_real:=", LaunchConfiguration('use_real'), " ",
+            "use_rviz:=", LaunchConfiguration('use_rviz'), " ",
         ]
     )
     
@@ -101,6 +104,17 @@ def generate_launch_description():
             {"use_sim_time": use_sim_time},
         ],
     )
+
+    real_planning_scene=Node(
+        package='utils',
+        executable='real_scene',
+        name='real_scene',
+        condition=IfCondition(
+            PythonExpression([
+                "'", use_real, "' == 'true' or '", use_rviz, "' == 'true'"
+            ])
+        ))
+    
     planning_scene_visualization = Node(
     package='utils',
     executable='planning_scene_visualization',
@@ -137,6 +151,7 @@ def generate_launch_description():
         output="both",
         condition=UnlessCondition(use_gazebo),
     )
+
 
     # 6. Gazebo Specific Nodes
     # Gazebo Simulator
@@ -271,14 +286,16 @@ def generate_launch_description():
         ros2_control_node,
 
         # # Common
-        # run_move_group_node,
-        # delay_rviz,
+        run_move_group_node,
+        delay_rviz,
         node_robot_state_publisher,
         
          # Move Group
         # Spawners (Conditioned delays)
         delay_spawners_real,
         delay_spawners_gazebo,
+        real_planning_scene
+        
     ]
 
     return LaunchDescription(ARGUMENTS + nodes_to_start)

@@ -13,7 +13,7 @@ class KeyGripper(Node):
         super().__init__('key_gripper')
         self._ac = ActionClient(self, GripperCommand, '/gripper_controller/gripper_cmd')
 
-        self.declare_parameter('open_pos', 0.025)
+        self.declare_parameter('open_pos', 0.8)
         self.declare_parameter('close_pos', 0.0)
         self.declare_parameter('max_effort', 20.0)
 
