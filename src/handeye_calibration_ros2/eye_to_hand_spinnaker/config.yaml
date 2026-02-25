@@ -1,0 +1,32 @@
+# ============================================================
+#  Eye-to-Hand Calibration Config (PySpin / Grasshopper3)
+# ============================================================
+
+# ── ArUco 설정 ──
+aruco_dictionary_name: "DICT_4X4_50"
+aruco_marker_name: "aruco_marker"
+aruco_marker_side_length: 0.145          # meters
+
+# ── 카메라 캘리브레이션 파일 (OpenCV FileStorage 형식) ──
+camera_calibration_parameters_filename: "src/handeye_calibration_ros2/eye_to_hand_spinnaker/spinnaker.yaml"
+
+# ── TF Frame 이름 ──
+calculated_camera_optical_frame_name: "camera_optical_frame"
+
+# ── 로봇 TF ──
+base_link: "base_link"
+ee_link: "link_6"
+
+# ── 저장 경로 ──
+marker_data_file_name: "src/handeye_calibration_ros2/eye_to_hand_spinnaker/resource/marker_data.yaml"
+robot_data_file_name: "src/handeye_calibration_ros2/eye_to_hand_spinnaker/resource/robot_data.yaml"
+image_filename: "src/handeye_calibration_ros2/eye_to_hand_spinnaker/resource/pose_{pose_count}.png"
+
+handeye_result_file_name: "src/handeye_calibration_ros2/eye_to_hand_spinnaker/resource/handeye_result.yaml"
+handeye_result_profile_file_name: "src/handeye_calibration_ros2/eye_to_hand_spinnaker/resource/handeye_result_spinnaker_profile.yaml"
+# ── PySpin 카메라 설정 (Grasshopper3) ──
+pyspin_exposure_auto: true
+pyspin_exposure_us: 20000
+pyspin_gain_auto: true
+pyspin_gain_db: 10.0
+pyspin_fps: 15.0
