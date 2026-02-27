@@ -8,6 +8,8 @@ Panels:
         - /Status1
         - /MotionPlanning1
         - /MotionPlanning1/Scene Geometry1
+        - /TF1
+        - /TF1/Frames1
       Splitter Ratio: 0.5
     Tree Height: 288
   - Class: rviz_common/Selection
@@ -178,7 +180,7 @@ Visualization Manager:
         Scene Alpha: 0.8999999761581421
         Scene Color: 50; 230; 50
         Scene Display Time: 0.009999999776482582
-        Show Scene Geometry: true
+        Show Scene Geometry: false
         Voxel Coloring: Z-Axis
         Voxel Rendering: Occupied Voxels
       Scene Robot:
@@ -293,6 +295,73 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /debug/neighbor_scope
       Value: true
+    - Class: rviz_default_plugins/TF
+      Enabled: true
+      Frame Timeout: 15
+      Frames:
+        All Enabled: false
+        aruco_marker:
+          Value: true
+        base_link:
+          Value: true
+        camera_link:
+          Value: true
+        grasp_target:
+          Value: true
+        link_1:
+          Value: false
+        link_2:
+          Value: false
+        link_3:
+          Value: false
+        link_4:
+          Value: false
+        link_5:
+          Value: false
+        link_6:
+          Value: false
+        robotiq_hande_coupler:
+          Value: false
+        robotiq_hande_end:
+          Value: false
+        robotiq_hande_left_finger:
+          Value: false
+        robotiq_hande_link:
+          Value: false
+        robotiq_hande_right_finger:
+          Value: false
+        world:
+          Value: false
+      Marker Scale: 1
+      Name: TF
+      Show Arrows: true
+      Show Axes: true
+      Show Names: true
+      Tree:
+        world:
+          base_link:
+            aruco_marker:
+              {}
+            camera_link:
+              {}
+            grasp_target:
+              {}
+            link_1:
+              link_2:
+                link_3:
+                  link_4:
+                    link_5:
+                      link_6:
+                        robotiq_hande_coupler:
+                          robotiq_hande_link:
+                            robotiq_hande_end:
+                              {}
+                            robotiq_hande_left_finger:
+                              {}
+                            robotiq_hande_right_finger:
+                              {}
+      Update Interval: 0
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -339,25 +408,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 2.4851324558258057
+      Distance: 4.316585540771484
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.29140791296958923
-        Y: 0.4991203248500824
-        Z: -0.49303051829338074
+        X: 0.8423426747322083
+        Y: 0.9095754027366638
+        Z: -0.2630535364151001
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.5703988671302795
+      Pitch: 0.42539918422698975
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 3.9054176807403564
+      Yaw: 3.7154252529144287
     Saved: ~
 Window Geometry:
   Displays:

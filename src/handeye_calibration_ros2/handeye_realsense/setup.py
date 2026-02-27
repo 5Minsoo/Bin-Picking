@@ -29,6 +29,7 @@ setup(
             'eye2hand = handeye_realsense.publish_eye2hand:main',
             'auto_move_calibration=handeye_realsense.auto_move_calibration:main',
             'auto_move_calibration_eyetohand=handeye_realsense.auto_move_calibration_eye_to_hand:main'
+            'data_collection_node_eyetohand=handeye_realsense.data_collection_node_eye_to_hand:main'
         ],
     },
 )

@@ -1,7 +1,8 @@
 """
-Copyright © 2024 Shengyang Zhuang. All rights reserved.
-
-Contact: https://shengyangzhuang.github.io/
+Hand-Eye Calibration Node (Eye-in-Hand)
+- 카메라가 그리퍼에 장착된 구조
+- cv2.calibrateHandEye() 사용
+- 결과: T_cam2gripper (camera ← gripper 변환)
 """
 import rclpy
 from rclpy.node import Node
@@ -11,136 +12,187 @@ import yaml
 from scipy.spatial.transform import Rotation as R
 import os
 
+
+HANDEYE_METHODS = {
+    "TSAI": cv2.CALIB_HAND_EYE_TSAI,
+    "PARK": cv2.CALIB_HAND_EYE_PARK,
+    "HORAUD": cv2.CALIB_HAND_EYE_HORAUD,
+    "ANDREFF": cv2.CALIB_HAND_EYE_ANDREFF,
+    "DANIILIDIS": cv2.CALIB_HAND_EYE_DANIILIDIS,
+}
+
+
 class HandEyeCalibrationNode(Node):
     def __init__(self):
         super().__init__('hand_eye_calibration_node')
         self.get_logger().info("Starting Hand-Eye Calibration Node")
-        
-        # with open('src/handeye_calibration_ros2/handeye_realsense/config.yaml', 'r') as file:
-        with open('src/handeye_calibration_ros2/eye_to_hand_spinnaker/config.yaml', 'r') as file:
+
+        with open('src/handeye_calibration_ros2/handeye_realsense/config.yaml', 'r') as file:
+        # with open('src/handeye_calibration_ros2/eye_to_hand_spinnaker/config.yaml', 'r') as file:
             config = yaml.safe_load(file)
+
         self.robot_data_file_name = config["robot_data_file_name"]
         self.marker_data_file_name = config["marker_data_file_name"]
         self.handeye_result_file_name = config["handeye_result_file_name"]
         self.handeye_result_profile_file_name = config["handeye_result_profile_file_name"]
 
-        # Load transformation data from YAML files
         self.R_gripper2base, self.t_gripper2base = self.load_transformations(self.robot_data_file_name)
         self.R_target2cam, self.t_target2cam = self.load_transformations(self.marker_data_file_name)
 
-        # Compute the hand-eye transformation matrix
+        if len(self.R_gripper2base) < 3:
+            self.get_logger().error(f"포즈 데이터 부족: {len(self.R_gripper2base)}개 (최소 3개 필요)")
+            return
+
         self.compute_hand_eye()
 
     def load_transformations(self, file_path):
-        import yaml
-        import numpy as np
+        self.get_logger().info(f"Loading: {file_path}")
 
-        print(f"[INFO] '{file_path}' 파일 읽기를 시작합니다...")
-        
         with open(file_path, 'r') as file:
             try:
                 data = yaml.safe_load(file)
             except yaml.YAMLError as exc:
-                print(f"[ERROR] YAML 파일 파싱 에러 (파일이 깨졌을 수 있습니다):\n{exc}")
+                self.get_logger().error(f"YAML 파싱 에러: {exc}")
                 return [], []
 
-            # 'poses' 키가 없으면 빈 리스트 반환
-            poses = data.get('poses', []) 
-            print(f"[INFO] 총 {len(poses)}개의 포즈 데이터를 찾았습니다.")
+        poses = data.get('poses', [])
+        self.get_logger().info(f"  → {len(poses)}개 포즈 발견")
 
-        R = []
-        t = []
+        rotations = []
+        translations = []
 
-        # enumerate를 사용해 몇 번째 데이터인지 추적합니다.
         for i, pose in enumerate(poses):
-            # 1. pose가 딕셔너리 형태인지 확인 (파일 형식 오류 방지)
             if not isinstance(pose, dict):
-                print(f"[ERROR] 인덱스 {i}: 데이터가 딕셔너리 형태가 아닙니다. (타입: {type(pose)})\n값: {pose}")
+                self.get_logger().error(f"  [{i}] 딕셔너리가 아님: {type(pose)}")
                 continue
-
-            # 2. 필수 키가 존재하는지 확인
             if 'rotation' not in pose or 'translation' not in pose:
-                print(f"[ERROR] 인덱스 {i}: 'rotation' 또는 'translation' 키가 누락되었습니다!")
-                print(f"        가지고 있는 키: {list(pose.keys())}")
-                print(f"        실제 데이터: {pose}")
+                self.get_logger().error(f"  [{i}] rotation/translation 키 누락")
                 continue
-
-            # 3. 데이터 변환 및 추가
             try:
-                rotation = np.array(pose['rotation'], dtype=np.float32)
-                translation = np.array(pose['translation'], dtype=np.float32)
-
-                R.append(rotation)
-                t.append(translation)
+                rot = np.array(pose['rotation'], dtype=np.float64)
+                trans = np.array(pose['translation'], dtype=np.float64)
+                rotations.append(rot)
+                translations.append(trans)
             except Exception as e:
-                print(f"[FATAL] 인덱스 {i} 배열 변환 중 에러 발생: {e}")
-                print(f"        문제의 데이터: {pose}")
+                self.get_logger().error(f"  [{i}] 변환 에러: {e}")
 
-        print(f"[INFO] 성공적으로 변환된 데이터: {len(R)}/{len(poses)} 개")
-        return R, t
+        self.get_logger().info(f"  → {len(rotations)}/{len(poses)}개 성공")
+        return rotations, translations
 
     def compute_hand_eye(self):
-        self.get_logger().info(f"Loaded {len(self.R_gripper2base)} rotations and {len(self.t_gripper2base)} translations for gripper to base")
-        self.get_logger().info(f"Loaded {len(self.R_target2cam)} rotations and {len(self.t_target2cam)} translations for target to camera")
-        rotations = [r.reshape(3, 3) for r in self.R_gripper2base]
-        translations = [t.reshape(3, 1) for t in self.t_gripper2base]
-        obj_rotations = [r.reshape(3, 3) for r in self.R_target2cam]
-        obj_translations = [t.reshape(3, 1) for t in self.t_target2cam]
+        n = len(self.R_gripper2base)
+        self.get_logger().info(f"캘리브레이션 시작: {n}개 포즈")
 
+        # ── Eye-in-Hand: gripper2base 그대로 사용 (역변환 불필요) ──
+        R_g2b = [r.reshape(3, 3) for r in self.R_gripper2base]
+        t_g2b = [t.reshape(3, 1) for t in self.t_gripper2base]
 
-        # Perform hand-eye calibration
-        R, t = cv2.calibrateHandEye(
-            rotations, translations, obj_rotations, obj_translations,
-            method=4)
+        R_t2c = [r.reshape(3, 3) for r in self.R_target2cam]
+        t_t2c = [t.reshape(3, 1) for t in self.t_target2cam]
 
-        # Save results to YAML
-        # Output: camera relative to gripper frame (eye to hand)
-        self.save_yaml(R, t)
-        #self.save_yaml_profile(R_qua, t)
-    
-    def rotation_matrix_to_quaternion(self, matrix):
-        """Convert a 3x3 rotation matrix into a quaternion."""
-        rotation = R.from_matrix(matrix)
-        return rotation.as_quat()
+        print("\n" + "=" * 70)
+        print("  Hand-Eye Calibration Results (Eye-in-Hand)")
+        print("  출력: T_cam2gripper (camera ← gripper)")
+        print("=" * 70)
 
-    def save_yaml(self, R, t):
-        '''This function will always show only the updated result'''
-        new_data = {'rotation': R.flatten().tolist(), 'translation': t.flatten().tolist()}
+        results = {}
+        for name, method in HANDEYE_METHODS.items():
+            try:
+                R_result, t_result = cv2.calibrateHandEye(
+                    R_g2b, t_g2b,
+                    R_t2c, t_t2c,
+                    method=method
+                )
 
-        # Write the new data to the YAML file, overwriting any existing content
+                det = np.linalg.det(R_result)
+                is_valid = abs(det - 1.0) < 0.01
+
+                quat = R.from_matrix(R_result).as_quat()
+                euler = R.from_matrix(R_result).as_euler('xyz', degrees=True)
+
+                results[name] = {
+                    'R': R_result,
+                    't': t_result,
+                    'det': det,
+                    'valid': is_valid,
+                    'quat': quat,
+                    'euler': euler,
+                }
+
+                valid_str = "OK" if is_valid else "BAD"
+                print(f"\n  [{name}] (det={det:.6f}) [{valid_str}]")
+                print(f"    Rotation:\n{self._fmt_matrix(R_result, 6)}")
+                print(f"    Translation: [{t_result[0][0]:.6f}, {t_result[1][0]:.6f}, {t_result[2][0]:.6f}]")
+                print(f"    Euler (xyz°): [{euler[0]:.2f}, {euler[1]:.2f}, {euler[2]:.2f}]")
+                print(f"    Quaternion:   [{quat[0]:.6f}, {quat[1]:.6f}, {quat[2]:.6f}, {quat[3]:.6f}]")
+
+            except Exception as e:
+                self.get_logger().warn(f"  [{name}] 실패: {e}")
+
+        print("\n" + "=" * 70)
+
+        valid_results = {k: v for k, v in results.items() if v['valid']}
+        if valid_results:
+            ts = np.array([v['t'].flatten() for v in valid_results.values()])
+            t_mean = ts.mean(axis=0)
+            t_std = ts.std(axis=0)
+            print(f"\n  유효 결과 {len(valid_results)}개 Translation 통계:")
+            print(f"    Mean: [{t_mean[0]:.6f}, {t_mean[1]:.6f}, {t_mean[2]:.6f}]")
+            print(f"    Std:  [{t_std[0]:.6f}, {t_std[1]:.6f}, {t_std[2]:.6f}]")
+
+        BEST = "TSAI"
+        if BEST in results and results[BEST]["valid"]:
+            best = results[BEST]
+        elif valid_results:
+            best_name = list(valid_results.keys())[0]
+            best = valid_results[best_name]
+            self.get_logger().warn(f"PARK 실패 → {best_name} 결과 저장")
+        else:
+            self.get_logger().error("유효한 캘리브레이션 결과 없음!")
+            return
+
+        self.save_yaml(best['R'], best['t'])
+        self.save_yaml_profile(best['quat'], best['t'])
+
+        self.get_logger().info("캘리브레이션 완료!")
+
+    def save_yaml(self, rotation, translation):
+        new_data = {
+            'rotation': rotation.flatten().tolist(),
+            'translation': translation.flatten().tolist()
+        }
         with open(self.handeye_result_file_name, 'w') as file:
             yaml.safe_dump(new_data, file)
+        self.get_logger().info(f"Result saved: {self.handeye_result_file_name}")
 
-        self.get_logger().info("Simulated hand-eye calibration results saved.")
-        print(f"Rotation matrix: {R}")
-        print(f"Translation vector: {t}")
-        
-    def save_yaml_profile(self, R, t):
-        '''This function saves the rotation and translation data in the correct format.'''
-        new_data = {'rotation': R.flatten().tolist(), 'translation': t.flatten().tolist()}
+    def save_yaml_profile(self, quaternion, translation):
+        new_data = {
+            'rotation': quaternion.tolist(),
+            'translation': translation.flatten().tolist()
+        }
 
-        # Check if the file exists and is not empty
-        if os.path.exists(self.handeye_result_profile_file_name) and os.path.getsize(self.handeye_result_profile_file_name) > 0:
-            # Load the existing data from the file
+        existing_data = {'transforms': []}
+        if os.path.exists(self.handeye_result_profile_file_name) and \
+           os.path.getsize(self.handeye_result_profile_file_name) > 0:
             with open(self.handeye_result_profile_file_name, 'r') as file:
-                existing_data = yaml.safe_load(file)
+                loaded = yaml.safe_load(file)
+                if loaded and 'transforms' in loaded:
+                    existing_data = loaded
 
-            # If the file contains data, append the new transform
-            if 'transforms' in existing_data:
-                existing_data['transforms'].append(new_data)
-            else:
-                existing_data = {'transforms': [new_data]}
-        else:
-            # If the file does not exist or is empty, start with a new structure
-            existing_data = {'transforms': [new_data]}
+        existing_data['transforms'].append(new_data)
 
-        # Save the updated structure back to the file
         with open(self.handeye_result_profile_file_name, 'w') as file:
             yaml.safe_dump(existing_data, file)
+        self.get_logger().info(f"Profile saved: {self.handeye_result_profile_file_name}")
 
-        self.get_logger().info("Simulated hand-eye calibration results saved.")
-        print(f"Rotation matrix quaternion: {R}")
-        print(f"Translation vector: {t}")
+    @staticmethod
+    def _fmt_matrix(m, indent=4):
+        prefix = " " * indent
+        rows = []
+        for row in m:
+            vals = ", ".join(f"{v:12.8f}" for v in row.flatten())
+            rows.append(f"{prefix}[{vals}]")
+        return "\n".join(rows)
 
 
 def main(args=None):
@@ -149,6 +201,7 @@ def main(args=None):
     rclpy.spin(node)
     node.destroy_node()
     rclpy.shutdown()
+
 
 if __name__ == '__main__':
     main()

@@ -66,7 +66,28 @@ class MoveToMarkerNode(Node):
         camera_calib_file = config["camera_calibration_parameters_filename"]
         handeye_result_file = config["handeye_result_file_name"]
         aruco_dict_name = config["aruco_dictionary_name"]
-
+        config_path = 'src/handeye_calibration_ros2/eye_to_hand_spinnaker/config.yaml'
+        with open(config_path, 'r') as file:
+            config = yaml.safe_load(file)
+        self.handeye_result_file_name = config["handeye_result_file_name"]
+        with open(self.handeye_result_file_name, 'r') as file:
+            config=yaml.safe_load(file)
+        self.camera_trans=np.array(config['translation'])
+        self.camera_rotation=np.array(config['rotation']).reshape(3,3)
+        quat=R.from_matrix(self.camera_rotation).as_quat()
+        broadcaster = tf2_ros.StaticTransformBroadcaster(self)
+        t=TransformStamped()
+        t.header.stamp = self.get_clock().now().to_msg()
+        t.header.frame_id = 'base_link'
+        t.child_frame_id = 'camera_link'
+        t.transform.translation.x = self.camera_trans[0]
+        t.transform.translation.y = self.camera_trans[1]
+        t.transform.translation.z = self.camera_trans[2]
+        t.transform.rotation.x = quat[0]
+        t.transform.rotation.y = quat[1]
+        t.transform.rotation.z = quat[2]
+        t.transform.rotation.w = quat[3]
+        broadcaster.sendTransform(t)
         # [중요] 타겟 위치 오프셋 (단위: 미터)
         self.target_offset = 0.35   
 

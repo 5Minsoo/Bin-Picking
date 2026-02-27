@@ -5,11 +5,12 @@ import math
 import numpy as np
 import cv2
 import yaml
-
+import random
 import rclpy
 from rclpy.node import Node
 from sensor_msgs.msg import Image
-from geometry_msgs.msg import Quaternion
+from scipy.spatial.transform import Rotation as R
+from geometry_msgs.msg import Quaternion, TransformStamped
 from cv_bridge import CvBridge
 
 # tf2 임포트
@@ -45,6 +46,22 @@ class AutoHandEyeVerifier(MoveItMoveHelper):
         # 작업 디렉토리에 맞춰 상대경로를 조정해야 할 수 있습니다.
         self.camera_matrix, self.dist_coeffs = self.load_camera_info(self.cfg.get('camera_calibration_parameters_filename'))
         self.T_ee_cam = self.load_handeye_result(self.cfg.get('handeye_result_file_name'))
+        Rot=self.T_ee_cam[:3,:3]
+        T=self.T_ee_cam[:3,3]
+        quat=R.from_matrix(Rot).as_quat()
+        self.tf_broadcaster=tf2_ros.StaticTransformBroadcaster(self)
+        tf_msg = TransformStamped()
+        tf_msg.header.stamp = self.get_clock().now().to_msg()
+        tf_msg.header.frame_id = 'link_6'
+        tf_msg.child_frame_id = 'camera_link'
+        tf_msg.transform.translation.x = float(T[0])
+        tf_msg.transform.translation.y = float(T[1])
+        tf_msg.transform.translation.z = float(T[2])
+        tf_msg.transform.rotation.x = float(quat[0])
+        tf_msg.transform.rotation.y = float(quat[1])
+        tf_msg.transform.rotation.z = float(quat[2])
+        tf_msg.transform.rotation.w = float(quat[3])
+        self.tf_broadcaster.sendTransform(tf_msg)
 
         # ROS 2 셋업
         self.bridge = CvBridge()
@@ -162,41 +179,57 @@ class AutoHandEyeVerifier(MoveItMoveHelper):
     def run_auto_verify(self, marker_xyz):
         self.get_logger().info("자동 캘리브레이션 검증을 시작합니다...")
         target = np.array(marker_xyz)
-        
-        tilts = [20, 40] 
+        camera_offset = np.array([-0.08, -0.01, 0.04])
+        tilts = [20, 40]
         pans = [0, 120, 240]
-        dist = 0.35 # 마커 크기가 14.5cm로 꽤 크므로 거리를 약간 벌림
+        dist = 0.35
+
+        from scipy.spatial.transform import Rotation
 
         for t in tilts:
             for p in pans:
                 rclpy.spin_once(self, timeout_sec=0.1)
-                
                 rad_t, rad_p = math.radians(t), math.radians(p)
-                cp = [
+
+                # 카메라 렌즈가 이 위치에 오도록 계산
+                cam_pos = [
                     target[0] + dist * math.sin(rad_t) * math.cos(rad_p),
                     target[1] + dist * math.sin(rad_t) * math.sin(rad_p),
                     target[2] + dist * math.cos(rad_t)
                 ]
-                
-                q_obj = self.make_grasp_quat_for_approach(-(target - np.array(cp)), np.array([1,0,0]))
+
+                # 카메라가 마커를 바라보는 방향
+                direction = target - np.array(cam_pos)
+                q_obj = self.make_grasp_quat_for_approach(
+                    -direction, np.array([1, 0, 0])
+                )
+
+                # 카메라 위치 → 그리퍼 위치로 역변환
+                rot = Rotation.from_quat([q_obj.x, q_obj.y, q_obj.z, q_obj.w])
+                gripper_pos = np.array(cam_pos) - rot.apply(camera_offset)
+
                 q_list = [q_obj.x, q_obj.y, q_obj.z, q_obj.w]
-                
+                cp = gripper_pos.tolist()
+
                 if self.move_cartesian(cp, q_list):
                     time.sleep(1.0)
                     rclpy.spin_once(self, timeout_sec=0.5)
-                    
                     T_base_ee = self.get_current_tcp_pose()
                     T_cam_marker = self.get_marker_pose_from_image()
-
                     if T_base_ee is not None and T_cam_marker is not None:
-                        # Eye-in-Hand 구조의 최종 마커 월드 좌표 계산
                         T_base_marker = T_base_ee @ self.T_ee_cam @ T_cam_marker
                         marker_base_xyz = T_base_marker[:3, 3]
-                        
                         self.calculated_marker_positions.append(marker_base_xyz)
-                        self.get_logger().info(f"계산된 마커 위치: X={marker_base_xyz[0]:.4f}, Y={marker_base_xyz[1]:.4f}, Z={marker_base_xyz[2]:.4f}")
+                        self.get_logger().info(
+                            f"계산된 마커 위치: X={marker_base_xyz[0]:.4f}, "
+                            f"Y={marker_base_xyz[1]:.4f}, Z={marker_base_xyz[2]:.4f}"
+                        )
                     else:
                         self.get_logger().warn("마커 검출 실패 또는 TF 수신 실패로 스킵합니다.")
+                else:
+                    self.get_logger().warn(
+                        f"Move failed: tilt={t}, pan={p} — skipping"
+                    )
 
         self.evaluate_calibration()
 
@@ -224,7 +257,7 @@ def main(args=None):
     verifier = AutoHandEyeVerifier()
     
     # 아루코 마커가 놓여있는 실제 공간의 대략적인 위치 (예: Base 기준 X 0.5m, Y 0.0m, Z 0.0m)
-    verifier.run_auto_verify(marker_xyz=[-0.133, -0.514, 0.15]) 
+    verifier.run_auto_verify(marker_xyz=[-0.699, -0.067, 0.1]) 
     
     rclpy.shutdown()
 

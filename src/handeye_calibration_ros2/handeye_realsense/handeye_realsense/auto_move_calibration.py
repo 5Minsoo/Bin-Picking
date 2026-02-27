@@ -8,6 +8,7 @@ import numpy as np
 import yaml
 import time
 import math
+import random
 
 # moveit_helper_functions 위치를 path에 추가 (상대 경로 임포트)
 current_dir = os.path.dirname(os.path.abspath(__file__))
@@ -30,51 +31,60 @@ class AutoHandEyeRunner(MoveItMoveHelper): # 상속해서 함수들 사용
         self.robot_data_path = os.path.join(current_dir, '..', self.cfg["robot_data_file_name"])
         self.trigger_pub = self.create_publisher(String, 'keypress_topic', 10)
 
-    def run_auto_calib(self, marker_xyz):
-        self.get_logger().info("Starting automatic trajectory...")
+# 그리퍼 원점 → 카메라 렌즈까지의 오프셋 (로봇 기준 측정 필요)
+# 예: 카메라가 그리퍼 기준으로 x +0.03, y 0, z +0.05 에 있다면
+
+
+    def run_auto_calib(self, marker_xyz, num_shots=40):
+        self.get_logger().info(f"Starting random calibration: {num_shots} shots")
         target = np.array(marker_xyz)
+        camera_offset = np.array([-0.08, -0.01, 0.04])
+        dist_range = (0.35, 0.55)
+        tilt_range = (0, 45)
+        pan_range = (0, 360)
 
-        # 거리(Z축 깊이) 변화 추가: 예를 들어 35cm, 45cm, 55cm
-        distances = [0.55, 0.60, 0.65] 
-        tilts = [15, 20, 25, 30, 35, 45]
-        pans = [0, 90,  180,  240]
+        count = 0
+        while count < num_shots:
+            dist = random.uniform(*dist_range)
+            t = random.uniform(*tilt_range)
+            p = random.uniform(*pan_range)
 
-        # 1. 최상위 루프: 거리(Z) 변화
-        for dist in distances:
-            # 2. 중간 루프: 기울기(Tilt) 변화
-            for t in tilts:
-                # 3. 최하위 루프: 회전(Pan) 변화
-                for p in pans:
-                    rad_t, rad_p = math.radians(t), math.radians(p)
-                    
-                    # 구면 좌표계를 이용한 Cartesian Position(cp) 계산
-                    cp = [
-                        target[0] + dist * math.sin(rad_t) * math.cos(rad_p),
-                        target[1] + dist * math.sin(rad_t) * math.sin(rad_p),
-                        target[2] + dist * math.cos(rad_t)
-                    ]
-                    
-                    # 마커를 바라보도록 그리퍼(카메라) 자세 방향 쿼터니언 계산
-                    q_obj = self.make_grasp_quat_for_approach(
-                        -(target - np.array(cp)), np.array([1, 0, 0])
-                    )
-                    q_list = [q_obj.x, q_obj.y, q_obj.z, q_obj.w]
+            rad_t, rad_p = math.radians(t), math.radians(p)
 
-                    # MoveIt을 통한 로봇 이동 명령
-                    if self.move_cartesian(cp, q_list):
-                        # 2. 로봇이 완전히 멈추고 진동이 잦아들 시간 대기 (매우 중요)
-                        self._wait_with_spin(2.0)
+            # 카메라 렌즈가 이 위치에 오도록 계산
+            cam_pos = [
+                target[0] + dist * math.sin(rad_t) * math.cos(rad_p),
+                target[1] + dist * math.sin(rad_t) * math.sin(rad_p),
+                target[2] + dist * math.cos(rad_t)
+            ]
 
-                        # 이미지 캡처 트리거 신호 전송
-                        self.trigger_pub.publish(String(data='r'))
-                        self.get_logger().info(f"Published 'r' for dist={dist}, tilt={t}, pan={p}")
-                        
-                        # 3. ArucoNode가 이미지를 처리하고 저장할 시간 확보
-                        self._wait_with_spin(1.0)
-                    else:
-                        self.get_logger().warn(f"Move failed for dist={dist}, tilt={t}, pan={p}")
+            # 카메라가 마커를 바라보는 방향
+            direction = target - np.array(cam_pos)
+            q_obj = self.make_grasp_quat_for_approach(
+                -direction, np.array([1, 0, 0])
+            )
 
-        self.get_logger().info("Calibration trajectory complete!")
+            # 카메라 위치 → 그리퍼 위치로 역변환
+            # 그리퍼 회전 행렬 구해서 오프셋을 빼줌
+            from scipy.spatial.transform import Rotation
+            rot = Rotation.from_quat([q_obj.x, q_obj.y, q_obj.z, q_obj.w])
+            gripper_pos = np.array(cam_pos) - rot.apply(camera_offset)
+
+            q_list = [q_obj.x, q_obj.y, q_obj.z, q_obj.w]
+            cp = gripper_pos.tolist()
+
+            if self.move_cartesian(cp, q_list):
+                self._wait_with_spin(2.0)
+                self.trigger_pub.publish(String(data='r'))
+                count += 1
+                self.get_logger().info(
+                    f"[{count}/{num_shots}] dist={dist:.3f}, tilt={t:.1f}, pan={p:.1f}"
+                )
+                self._wait_with_spin(1.0)
+            else:
+                self.get_logger().warn(
+                    f"Move failed: dist={dist:.3f}, tilt={t:.1f}, pan={p:.1f} — retrying"
+                )
 
     def _wait_with_spin(self, duration):
         start = time.time()
@@ -85,14 +95,7 @@ class AutoHandEyeRunner(MoveItMoveHelper): # 상속해서 함수들 사용
 def main():
     rclpy.init()
     runner = AutoHandEyeRunner()
-
-    # 1. DDS discovery 대기 - subscriber(ArucoNode)와 연결 확인
-    runner.get_logger().info("Waiting for ArucoNode subscriber...")
-    while runner.trigger_pub.get_subscription_count() == 0:
-        rclpy.spin_once(runner, timeout_sec=0.1)
-    runner.get_logger().info(f"Connected! ({runner.trigger_pub.get_subscription_count()} subscribers)")
-
-    runner.run_auto_calib(marker_xyz=[-0.133, -0.514, 0.15])
+    runner.run_auto_calib(marker_xyz=[-0.699, -0.067, 0.1])
     runner.destroy_node()
     rclpy.shutdown()
 

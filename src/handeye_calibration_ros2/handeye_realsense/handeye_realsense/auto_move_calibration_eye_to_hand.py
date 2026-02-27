@@ -86,7 +86,7 @@ class AutoEyeToHandRunner(MoveItMoveHelper):
 
         position_offsets = np.column_stack([
             np.random.uniform(-0.06, 0.03,  num_poses),
-            np.random.uniform(-0.06, 0.06, num_poses),
+            np.random.uniform(0.0, 0.06, num_poses),
             np.random.uniform(-0.05, 0.05, num_poses),
         ])
 
@@ -183,7 +183,7 @@ class AutoEyeToHandRunner(MoveItMoveHelper):
             )
 
             if self.move_cartesian(pos.tolist(), q_final):
-                self._wait_with_spin(.0)
+                self._wait_with_spin(4.0)
                 self.trigger_pub.publish(String(data='r'))
                 success_count += 1
                 self.get_logger().info(f"  → saved ({success_count}번째)")
@@ -209,7 +209,7 @@ def main():
     # ── 1차: 기준 자세 A, world_z -90→0 (오름차순) ──
     runner.get_logger().info("===== Phase 1: ref_quat A =====")
     runner.run_auto_calib(
-        ref_pos=[0.65, 0.1, 0.525],
+        ref_pos=[0.55, 0.2, 0.525],
         ref_quat_xyzw=[0.5, 0.5, 0.5, 0.5],
         num_poses=20,
         seed=42,
@@ -220,8 +220,8 @@ def main():
     # ── 2차: 기준 자세 B, world_z 90→0 (내림차순) ──
     runner.get_logger().info("===== Phase 2: ref_quat B =====")
     runner.run_auto_calib(
-        ref_pos=[0.65, -0.1, 0.525],
-        ref_quat_xyzw=[0.5, 0.5, 0.5, 0.5],
+        ref_pos=[0.55, 0.2, 0.525],
+        ref_quat_xyzw=[0.7071, 0.0, 0.0, 0.7071],
         num_poses=20,
         seed=43,
         world_z_range=(0, 90),

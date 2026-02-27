@@ -294,7 +294,7 @@ def generate_launch_description():
         # Spawners (Conditioned delays)
         delay_spawners_real,
         delay_spawners_gazebo,
-        real_planning_scene
+        # real_planning_scene
         
     ]
 
