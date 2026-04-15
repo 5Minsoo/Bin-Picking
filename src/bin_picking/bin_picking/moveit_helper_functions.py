@@ -31,11 +31,9 @@ from shape_msgs.msg import SolidPrimitive
 class MoveItMoveHelper(Node):
     def __init__(self):
         super().__init__("moveit_move_helper")
-
-        # ===== 사용 환경에 맞게 수정 =====
         self.BASE_FRAME = "base_link"
         self.GROUP_NAME = "manipulator"
-        self.EE_LINK = "link_6"
+        self.EE_LINK = "hande_tcp_link"
         self.JOINT_NAMES = [
             "joint_1", "joint_2", "joint_3",
             "joint_4", "joint_5", "joint_6",
@@ -44,7 +42,6 @@ class MoveItMoveHelper(Node):
         self.MOVE_ACTION_NAME = "/move_action"
         self.EXEC_ACTION_NAME = "/execute_trajectory"
         self.CART_SERVICE_NAME = "/compute_cartesian_path"
-        # ===============================
 
         self.move_ac = ActionClient(self, MoveGroup, self.MOVE_ACTION_NAME)
         self.exec_ac = ActionClient(self, ExecuteTrajectory, self.EXEC_ACTION_NAME)

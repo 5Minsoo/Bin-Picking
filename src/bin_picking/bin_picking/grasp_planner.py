@@ -10,6 +10,7 @@ import math
 import numpy as np
 from scipy.spatial.transform import Rotation as R
 
+
 class GraspQualityScorer:
     def __init__(self):
         # 가중치 설정
@@ -66,12 +67,14 @@ class GraspPlanner(Node):
         self.scorer = GraspQualityScorer()
         self.center=[0,0]
         self.size=[0,0]
+        self.yaw=0
         # 상자 경계 정보 저장용 변수
         self.bin_bounds = None 
         
         self.neighbor_radius = 0.02         
         self.neighbor_height_threshold = 0.01 
-        self.local_move_vector = np.array([0.02, 0.0, 0.0]) 
+        # self.local_move_vector = np.array([0.02, 0.0, 0.0]) 
+        self.local_move_vector = np.array([0.00, 0.0, 0.0]) 
 
         # 무시할 영역 (World 좌표 기준, 필요시 사용)
         self.ignore_zone = {
@@ -88,7 +91,16 @@ class GraspPlanner(Node):
 
     def names_callback(self, msg):
         try:
-            self.object_names = json.loads(msg.data)
+            data = json.loads(msg.data)
+
+            if isinstance(data, dict):
+                # 카메라 모드: {"obj_1": 0.012, "obj_2": 0.034}
+                self.object_names = list(data.keys())
+                self.errors       = list(data.values())
+            elif isinstance(data, list):
+                # Isaac Sim 모드: ["obj_1", "obj_2"]
+                self.object_names = data
+
         except json.JSONDecodeError:
             pass
 
@@ -101,6 +113,7 @@ class GraspPlanner(Node):
             data = json.loads(msg.data)
             self.center = data.get("center", [0, 0])
             self.size = data.get("size", [0.5, 0.5]) # 기본값 처리
+            self.yaw=data.get("yaw",0)
 
             cx, cy = self.center[0], self.center[1]
             w, h = self.size[0], self.size[1] # w: x축 크기, h: y축 크기

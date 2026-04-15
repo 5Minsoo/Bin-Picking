@@ -29,12 +29,13 @@ from moveit_msgs.msg import (
 )
 from shape_msgs.msg import SolidPrimitive
 from scipy.spatial.transform import Rotation as R
-from bin_picking.moveit_helper_functions import MoveItMoveHelper as helper
+from moveit_helper_functions import MoveItMoveHelper as helper
+from tf2_ros import TransformBroadcaster
+from geometry_msgs.msg import TransformStamped
 
 # ==========================================
 # [설정]
 # ==========================================
-LINK_NAME = "link_6"
 BASE_FRAME = "base_link"
 GRIPPER_TOPIC = "/gripper_controller/gripper_cmd"
 
@@ -58,6 +59,8 @@ class SmartGraspNode(Node):
         self.cart_cli = self.create_client(GetCartesianPath, "/compute_cartesian_path", callback_group=self.cb_group)
         self.exec_cli = ActionClient(self, ExecuteTrajectory, "/execute_trajectory", callback_group=self.cb_group)
         self.gripper_ac = ActionClient(self, GripperCommand, GRIPPER_TOPIC, callback_group=self.cb_group)
+
+        self.tf_broadcaster = TransformBroadcaster(self)
 
         self.lock = threading.Lock()
         self.is_busy = False
@@ -83,21 +86,26 @@ class SmartGraspNode(Node):
                 [ori_dict["x"], ori_dict["y"], ori_dict["z"], ori_dict["w"]]
             ).as_matrix()
 
-            # self.helper.move_to_joint_values(joint_goal = {
-            #                 "joint_1": 1.622,
-            #                 "joint_2": 0.4357,
-            #                 "joint_4": 3.0167,
-            #                 "joint_5": -1.278,
-            #                 "joint_3": 1.4254,
-            #                 "joint_6": 0.0
-            #             })
-            self.helper.move_to_joint_values(joint_goal = {
-                "joint_1": -0.901378,
-                "joint_2": 0.064557,
-                "joint_3": 1.855237,
-                "joint_4": 0.057761,
-                "joint_5": 1.069546,
-                "joint_6": -0.000044
+                    # TF broadcast
+            t = TransformStamped()
+            t.header.stamp = self.get_clock().now().to_msg()
+            t.header.frame_id = BASE_FRAME
+            t.child_frame_id = "grasp_target"
+            t.transform.translation.x = pos_dict["x"]
+            t.transform.translation.y = pos_dict["y"]
+            t.transform.translation.z = pos_dict["z"]
+            t.transform.rotation.x = ori_dict["x"]
+            t.transform.rotation.y = ori_dict["y"]
+            t.transform.rotation.z = ori_dict["z"]
+            t.transform.rotation.w = ori_dict["w"]
+            self.tf_broadcaster.sendTransform(t)
+            self.helper.move_to_joint_values(joint_goal={
+                "joint_1": 0.1945,
+                "joint_2": 0.1722,
+                "joint_3": 1.6341,
+                "joint_4": 0.0021,
+                "joint_5": 1.3097,
+                "joint_6": -1.3113
             })
             self.get_logger().info(f"Target Received: {status}")
             self.last_status=status
@@ -140,13 +148,12 @@ class SmartGraspNode(Node):
         self.get_logger().info("[Flipped] Strategy Start with Multi-Vectors")
 
         # 2. 파라미터 설정
-        OFFSET_DIST = 0.4  # 접근 대기 거리
-        INSERT_DIST = 0.168  # 진입 깊이 (중심으로부터의 거리)
+        OFFSET_DIST = 0.25  # 접근 대기 거리
         obj_local_x = -rot_mat[:3, 0] 
         approach_vec=np.array([0.0,0.0,1.0])
         # P1: 접근 대기 위치, P2: 진입(Grasp) 위치
         p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST)
-        p2_grasp_pos    = center_pos + (approach_vec * INSERT_DIST) 
+        p2_grasp_pos    = center_pos
 
         # 쿼터니언 계산
         grasp_quat = self.helper.make_grasp_quat_for_approach(approach_vec, obj_local_x)
@@ -176,7 +183,7 @@ class SmartGraspNode(Node):
             approach_vec = approach_vec / np.linalg.norm(approach_vec)
 
             p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST) - (0.01*bin_vec)
-            p2_grasp_pos    = center_pos + (approach_vec * INSERT_DIST) - (0.01*bin_vec)
+            p2_grasp_pos    = center_pos - (0.01*bin_vec)
             grasp_quat = self.helper.make_grasp_quat_for_approach(approach_vec, obj_local_x)
             wps= [self.helper._build_pose(pos, grasp_quat) for pos in [p1_approach_pos, p2_grasp_pos]]
 
@@ -206,14 +213,13 @@ class SmartGraspNode(Node):
         self.get_logger().info("[Flipped] Strategy Start with Multi-Vectors")
 
         # 2. 파라미터 설정
-        OFFSET_DIST = 0.4  # 접근 대기 거리
-        INSERT_DIST = 0.168  # 진입 깊이 (중심으로부터의 거리)
-        INSERT_DIST_VERTICAL = 0.16
+        OFFSET_DIST = 0.25  # 접근 대기 거리
+        INSERT_DIST = 0.0 # 진입 깊이 (중심으로부터의 거리)
         obj_local_x = rot_mat[:3, 0] 
         approach_vec=np.array([0.0,0.0,1.0])
         # P1: 접근 대기 위치, P2: 진입(Grasp) 위치
         p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST)
-        p2_grasp_pos    = center_pos + (approach_vec * INSERT_DIST_VERTICAL) 
+        p2_grasp_pos    = center_pos
 
         # 쿼터니언 계산
         grasp_quat = self.helper.make_grasp_quat_for_approach(approach_vec, obj_local_x)
@@ -243,7 +249,7 @@ class SmartGraspNode(Node):
             approach_vec = approach_vec / np.linalg.norm(approach_vec)
 
             p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST) - (0.01*bin_vec)
-            p2_grasp_pos    = center_pos + (approach_vec * INSERT_DIST) - (0.01*bin_vec)
+            p2_grasp_pos    = center_pos - (0.01*bin_vec)
             grasp_quat = self.helper.make_grasp_quat_for_approach(approach_vec, obj_local_x)
             wps= [self.helper._build_pose(pos, grasp_quat) for pos in [p1_approach_pos, p2_grasp_pos]]
 
@@ -277,10 +283,10 @@ class SmartGraspNode(Node):
         self.get_logger().info("[Lying] Start operation...")
 
         # --- [Step 0] 설정 변수들 ---
-        PRE_GRASP_DIST = 0.35      # 접근 전 대기 거리 (m)
-        RETREAT_DIST = 0.45        # 후퇴 거리 (m)
+        PRE_GRASP_DIST = 0.25      # 접근 전 대기 거리 (m)
+        RETREAT_DIST = 0.25        # 후퇴 거리 (m)
         # 층(Layer)을 형성하기 위한 오프셋 목록
-        inner_offsets = np.arange(0.13, 0.135, 0.001) 
+        inner_offsets = np.arange(0.0, 0.135, 0.001) 
 
         # --- [Step 1] 접근 벡터 후보군 계산 ---
         candidates = []

@@ -26,7 +26,7 @@ def quaternion_from_euler(roll=3.14, pitch=0.0, yaw=0.0):
 class MoveItMinimal(Node):
     GROUP_NAME = "manipulator"
     BASE_FRAME = "base_link"
-    EE_LINK = "link_6"
+    EE_LINK = "hande_tcp_link"
 
     def __init__(self):
         super().__init__("moveit_minimal_with_cartesian")
@@ -155,13 +155,13 @@ def main():
     w1 = Pose()
     w1.position.x = 0.8
     w1.position.y = -0.2
-    w1.position.z = 0.50
+    w1.position.z = 0.0
     w1.orientation.x, w1.orientation.y, w1.orientation.z, w1.orientation.w = quaternion_from_euler(roll=3.14, pitch=0.0, yaw=0.0)
 
     w2 = Pose()
     w2.position.x = w1.position.x
     w2.position.y = w1.position.y
-    w2.position.z = w1.position.z - 0.10
+    w2.position.z = w1.position.z
     w2.orientation.x, w2.orientation.y, w2.orientation.z, w2.orientation.w = quaternion_from_euler(roll=3.14, pitch=0.0, yaw=0.0)
 
     node.cartesian_execute([w1, w2], eef_step=0.005, jump_threshold=0.0)

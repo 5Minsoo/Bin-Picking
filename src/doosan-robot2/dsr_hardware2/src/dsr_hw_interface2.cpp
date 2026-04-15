@@ -261,7 +261,7 @@ CallbackReturn DRHWInterface::on_init(const hardware_interface::HardwareInfo & i
 		}
 		RCLCPP_INFO(rclcpp::get_logger("dsr_hw_interface2"), "Connected RT control stream");
 		const std::string version   = "v1.0";
-		const float       period    = 0.001;
+		const float       period    = 0.01;// 0.001 -> 0.01 #######################################################
 		const int         losscount = 4;
 		if (!Drfl.set_rt_control_output(version, period, losscount)) {
 			RCLCPP_ERROR(rclcpp::get_logger("dsr_hw_interface2"), "Unable to connect RT control stream");

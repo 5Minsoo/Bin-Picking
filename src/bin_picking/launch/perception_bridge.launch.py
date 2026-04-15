@@ -9,13 +9,19 @@ def generate_launch_description():
             name="perception_bridge",
             output="screen",
         ),
-        TimerAction(period=1.0, actions=[
         Node(
             package="bin_picking",
-            executable="perception_planning_scene",
-            name="perception_planning_scene",
+            executable="perception_bridge",
+            name="grasp_planner",
             output="screen",
-        )]),
+        ),
+        # TimerAction(period=1.0, actions=[
+        # Node(
+        #     package="bin_picking",
+        #     executable="perception_planning_scene",
+        #     name="perception_planning_scene",
+        #     output="screen",
+        # )]),
         # Node(
         #     package="bin_picking",
         #     executable="object_visualization",

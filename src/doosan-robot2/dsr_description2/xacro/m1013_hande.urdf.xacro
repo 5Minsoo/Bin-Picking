@@ -30,5 +30,32 @@
 
   <xacro:m1013 namespace="$(arg namespace)"/>
 
+  <link name="camera_link"/>
+  <!--
+  -->
+  <!--
+      Calibration result:
+        Rotation matrix:
+          [ 0.03652693, -0.99909528,  0.02178074]
+          [ 0.99917403,  0.03612412, -0.01860930]
+          [ 0.01780565,  0.02244249,  0.99958956]
+        Translation: [-0.07298141, -0.03018699, 0.04048012]
+        RPY (rad):   [0.02244794, -0.01780659, 1.53425547]
+  -->
+  <joint name="camera_joint" type="fixed">
+  <parent link="link_6"/>
+  <child link="camera_link"/>
+  <origin xyz="-0.07298140504085619 -0.03018698555337856 0.04048012298741706" rpy="0.0224479387 -0.0178065928 1.5342554719"/>
+  </joint>
+  <!--
+  camera_link -> camera_optical_frame (standard ROS optical rotation) 
+  -->
+  <link name="hande_tcp_link"/>
+
+  <joint name="hande_tcp_joint" type='fixed'>
+    <parent link="link_6"/>
+    <child link="hande_tcp_link"/>
+    <origin rpy="0 0 0" xyz="0 0 0.158"/>
+  </joint>
 
 </robot>

@@ -27,7 +27,7 @@
 
 
     <xacro:include filename="$(find dsr_description2)/xacro/m1013_hande.urdf.xacro" />
-
+    
 
     <xacro:unless value="${gz or use_isaac or use_real}">
         <xacro:include filename="m1013_hande.ros2_control.xacro"/>

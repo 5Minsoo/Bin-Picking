@@ -240,7 +240,7 @@ def generate_launch_description():
         OnProcessStart(
             target_action=ros2_control_node,
             on_start=[
-                TimerAction(period=2.0, actions=[
+                TimerAction(period=5.0, actions=[
                     joint_state_broadcaster, 
                     dsr_controller, 
                     gripper_controller
@@ -273,7 +273,19 @@ def generate_launch_description():
         output='screen',        condition=IfCondition(use_gazebo),
     )
 
+    perception_bridge=Node(
+        package="bin_picking",
+        executable="perception_bridge",
+        name="perception_bridge",
+        output="screen",
+        )
     
+    grasp_planner=Node(
+        package="bin_picking",
+        executable="perception_bridge",
+        name="grasp_planner",
+        output="screen")
+
     nodes_to_start = [
         # Gazebo Environment
         gazebo,
@@ -294,7 +306,10 @@ def generate_launch_description():
         # Spawners (Conditioned delays)
         delay_spawners_real,
         delay_spawners_gazebo,
-        # real_planning_scene
+        # real_planning_scene,
+
+        perception_bridge,
+        grasp_planner
         
     ]
 
