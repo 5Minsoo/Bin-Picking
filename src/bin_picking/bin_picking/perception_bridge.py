@@ -24,6 +24,10 @@ def short_name(entity_path: str) -> str:
 BASE_DIR = Path(__file__).resolve().parent.parent
 path=BASE_DIR/ "handeye_result.yaml"
 
+CONFIG_PATH = BASE_DIR / "cfg" / "config.yaml"
+with open(CONFIG_PATH, "r") as _f:
+    CFG = yaml.safe_load(_f)
+
 class PerceptionBridge(Node):
     def __init__(self):
         super().__init__("perception_bridge")
@@ -94,6 +98,7 @@ class PerceptionBridge(Node):
     # =============================================
 
     def camera_pose_callback(self, msg: PoseArray):
+        offset = np.array(CFG["pose_offset"], dtype=float)
         transformed = PoseArray()
         transformed.header= msg.header
         transformed.header.frame_id = self.world_frame
@@ -114,9 +119,8 @@ class PerceptionBridge(Node):
             T_world = self.T_base_camera @ T_cam
 
             new_pose = Pose()
-            new_pose.position.x = T_world[:3, 3][0] + 0.01
-            new_pose.position.y= T_world[:3, 3][1] +0.04
-            new_pose.position.z = T_world[:3, 3][2]
+            pos = T_world[:3, 3] + offset
+            new_pose.position.x, new_pose.position.y, new_pose.position.z = pos
             q_world = Rotation.from_matrix(T_world[:3, :3]).as_quat()
             new_pose.orientation.x, new_pose.orientation.y, new_pose.orientation.z, new_pose.orientation.w = q_world
             transformed.poses.append(new_pose)
@@ -170,7 +174,7 @@ class PerceptionBridge(Node):
             pts_world = []
             for pt in pts_cam:
                 pt_3d = np.array([pt[0], pt[1], 0.0])
-                pw = self.hand_eye_R @ pt_3d + self.hand_eye_t
+                pw = self.T_base_camera @ pt_3d
                 pts_world.append(pw[:2])
             pts_world = np.array(pts_world)  # shape: (4, 2)
 

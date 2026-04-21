@@ -2,9 +2,12 @@
 import json
 import time
 import math
+import os
 import threading
+import yaml
 import numpy as np
 from typing import Optional, List, Tuple
+from pathlib import Path
 
 import rclpy
 from rclpy.node import Node
@@ -34,15 +37,19 @@ from tf2_ros import TransformBroadcaster
 from geometry_msgs.msg import TransformStamped
 
 # ==========================================
-# [설정]
+# [Config Load]
 # ==========================================
-BASE_FRAME = "base_link"
-GRIPPER_TOPIC = "/gripper_controller/gripper_cmd"
+BASE_DIR = Path(__file__).resolve().parent.parent
+CONFIG_PATH = BASE_DIR / "cfg" / "config.yaml"
 
-GRIPPER_OPEN  = 0.05
-GRIPPER_CLOSE = 0.00
+with open(CONFIG_PATH, "r") as _f:
+    CFG = yaml.safe_load(_f)
 
-OFFSET_DIST   = 0.3
+BASE_FRAME     = CFG["base_frame"]
+GRIPPER_TOPIC  = CFG["gripper_topic"]
+GRIPPER_OPEN   = CFG["gripper_open"]
+GRIPPER_CLOSE  = CFG["gripper_close"]
+OFFSET_DIST    = CFG["offset_dist"]
 
 # ==========================================
 # [Main Class]
@@ -54,18 +61,34 @@ class SmartGraspNode(Node):
         self.cb_group = ReentrantCallbackGroup()
 
         self.sub = self.create_subscription(
-            String, "/grasp_planner/target_info", self.on_target, 10, callback_group=self.cb_group
+            String, CFG["target_info_topic"], self.on_target, 10, callback_group=self.cb_group
         )
-        self.cart_cli = self.create_client(GetCartesianPath, "/compute_cartesian_path", callback_group=self.cb_group)
-        self.exec_cli = ActionClient(self, ExecuteTrajectory, "/execute_trajectory", callback_group=self.cb_group)
+        self.cart_cli = self.create_client(GetCartesianPath, CFG["cartesian_path_srv"], callback_group=self.cb_group)
+        self.exec_cli = ActionClient(self, ExecuteTrajectory, CFG["execute_trajectory_action"], callback_group=self.cb_group)
         self.gripper_ac = ActionClient(self, GripperCommand, GRIPPER_TOPIC, callback_group=self.cb_group)
 
+        self.sub_bin_info = self.create_subscription(String, '/perception_bridge/bin_info', self.bin_info_callback)
+        
         self.tf_broadcaster = TransformBroadcaster(self)
 
         self.lock = threading.Lock()
         self.is_busy = False
         self.get_logger().info(">>> Smart Grasp Node Ready (Clean Mode) <<<")
 
+        self.size=None
+        self.center=None
+        self.yaw=0
+
+    def bin_info_callback(self, msg):
+        """
+        /perception_bridge/bin_info 토픽 콜백
+        수신 데이터 예시: {"center": [0.0, 0.8], "size": [0.445, 0.45]}
+        """
+        data = json.loads(msg.data)
+        self.center = data.get("center", [0, 0])
+        self.size = data.get("size", [0.5, 0.5]) # 기본값 처리
+        self.yaw=data.get("yaw",0)
+    
     def on_target(self, msg):
         with self.lock:
             if self.is_busy:
@@ -99,26 +122,19 @@ class SmartGraspNode(Node):
             t.transform.rotation.z = ori_dict["z"]
             t.transform.rotation.w = ori_dict["w"]
             self.tf_broadcaster.sendTransform(t)
-            self.helper.move_to_joint_values(joint_goal={
-                "joint_1": 0.1945,
-                "joint_2": 0.1722,
-                "joint_3": 1.6341,
-                "joint_4": 0.0021,
-                "joint_5": 1.3097,
-                "joint_6": -1.3113
-            })
+            self.helper.move_to_joint_values(joint_goal=CFG["home_joints"])
             self.get_logger().info(f"Target Received: {status}")
             self.last_status=status
             success = False
 
             if status == "Flipped":
                 self.get_logger().info("Flipped")             
-                success = self.handle_flipped(center_pos, rot_mat)
+                success = self.handle_flipped(center_pos, rot_mat,self.center)
             elif status == "Standing":
                 self.get_logger().info("Standing")
                 self.operate_gripper(GRIPPER_OPEN)
                 time.sleep(0.3)    
-                success = self.handle_standing(center_pos, rot_mat)
+                success = self.handle_standing(center_pos, rot_mat,self.center)
             elif status == "Lying":
                 self.get_logger().info("Lying")
                 self.operate_gripper(GRIPPER_OPEN)
@@ -126,12 +142,15 @@ class SmartGraspNode(Node):
                 success = self.handle_lying(center_pos, rot_mat)
             time.sleep(0.3)
             
-            # if success:
-            #     self.get_logger().info(">>> 작업 성공 <<<")
-            #     self.handle_convey(convey_pos=np.array([0.5, 0.0, 0.3]), grasp_quat=np.array([0.0,1.0,0.0,0.0]))
-            #     time.sleep(2.0)
-            # else:
-            #     self.get_logger().error(">>> 작업 실패 <<<")
+            if success:
+                self.get_logger().info(">>> 작업 성공 <<<")
+                self.handle_convey(
+                    convey_pos=np.array(CFG["convey_pos"], dtype=float),
+                    grasp_quat=np.array(CFG["convey_quat"], dtype=float),
+                )
+                time.sleep(CFG["post_convey_sleep"])
+            else:
+                self.get_logger().error(">>> 작업 실패 <<<")
 
         except Exception as e:
             self.get_logger().error(f"Logic Error: {e}")
@@ -142,13 +161,15 @@ class SmartGraspNode(Node):
 # =========================================================================
     # [1] Flipped
     # =========================================================================
-    def handle_flipped(self, center_pos, rot_mat,bin_center=[0.0,0.8]):
+    def handle_flipped(self, center_pos, rot_mat, bin_center=None):
+        if bin_center is None:
+            bin_center = CFG["flipped"]["bin_center"]
         self.last_status= "Flipped"
         self.get_logger().info(str(bin_center))
         self.get_logger().info("[Flipped] Strategy Start with Multi-Vectors")
 
         # 2. 파라미터 설정
-        OFFSET_DIST = 0.25  # 접근 대기 거리
+        OFFSET_DIST = CFG["flipped"]["offset_dist"]  # 접근 대기 거리
         obj_local_x = -rot_mat[:3, 0] 
         approach_vec=np.array([0.0,0.0,1.0])
         # P1: 접근 대기 위치, P2: 진입(Grasp) 위치
@@ -172,18 +193,18 @@ class SmartGraspNode(Node):
         # [Step 2] 진입 위치(P2)로 이동 시도 (여기가 핵심 기준)
         # ---------------------------------------------------------
         # P2 진입 (충돌 감지 ON - 물체나 주변 방해물 확인)
-        if not self.helper.move_cartesian([self.helper._build_pose(p2_grasp_pos, grasp_quat)], collision=True,min_fraction=0.95):
+        if not self.helper.move_cartesian([self.helper._build_pose(p2_grasp_pos, grasp_quat)], collision=True, min_fraction=CFG["flipped"]["insertion_min_fraction"]):
             self.get_logger().warn(f"[Standing] Vector insertion(P2) failed.")
             time.sleep(0.5)
 
             bin_vec= np.array([bin_center[0], bin_center[1], center_pos[2]]) - center_pos
             bin_vec = bin_vec / np.linalg.norm(bin_vec)
 
-            approach_vec=obj_local_x + 0.25*bin_vec
+            approach_vec=obj_local_x + CFG["flipped"]["bin_blend_ratio"]*bin_vec
             approach_vec = approach_vec / np.linalg.norm(approach_vec)
 
-            p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST) - (0.01*bin_vec)
-            p2_grasp_pos    = center_pos - (0.01*bin_vec)
+            p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST) - (CFG["flipped"]["bin_side_shift"]*bin_vec)
+            p2_grasp_pos    = center_pos - (CFG["flipped"]["bin_side_shift"]*bin_vec)
             grasp_quat = self.helper.make_grasp_quat_for_approach(approach_vec, obj_local_x)
             wps= [self.helper._build_pose(pos, grasp_quat) for pos in [p1_approach_pos, p2_grasp_pos]]
 
@@ -207,14 +228,16 @@ class SmartGraspNode(Node):
     # =========================================================================
     # [2] Standing
     # =========================================================================
-    def handle_standing(self, center_pos, rot_mat,bin_center=[0.0,0.8]): 
-        self.last_status= "Flipped"
+    def handle_standing(self, center_pos, rot_mat, bin_center=None):
+        if bin_center is None:
+            bin_center = CFG["standing"]["bin_center"]
+        self.last_status= "Standing"
         self.get_logger().info(str(bin_center))
         self.get_logger().info("[Flipped] Strategy Start with Multi-Vectors")
 
         # 2. 파라미터 설정
-        OFFSET_DIST = 0.25  # 접근 대기 거리
-        INSERT_DIST = 0.0 # 진입 깊이 (중심으로부터의 거리)
+        OFFSET_DIST = CFG["standing"]["offset_dist"]   # 접근 대기 거리
+        INSERT_DIST = CFG["standing"]["insert_dist"]   # 진입 깊이 (중심으로부터의 거리)
         obj_local_x = rot_mat[:3, 0] 
         approach_vec=np.array([0.0,0.0,1.0])
         # P1: 접근 대기 위치, P2: 진입(Grasp) 위치
@@ -245,11 +268,11 @@ class SmartGraspNode(Node):
             bin_vec= np.array([bin_center[0], bin_center[1], center_pos[2]]) - center_pos
             bin_vec = bin_vec / np.linalg.norm(bin_vec)
 
-            approach_vec=obj_local_x + 0.25*bin_vec
+            approach_vec=obj_local_x + CFG["standing"]["bin_blend_ratio"]*bin_vec
             approach_vec = approach_vec / np.linalg.norm(approach_vec)
 
-            p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST) - (0.01*bin_vec)
-            p2_grasp_pos    = center_pos - (0.01*bin_vec)
+            p1_approach_pos = center_pos + (approach_vec * OFFSET_DIST) - (CFG["standing"]["bin_side_shift"]*bin_vec)
+            p2_grasp_pos    = center_pos - (CFG["standing"]["bin_side_shift"]*bin_vec)
             grasp_quat = self.helper.make_grasp_quat_for_approach(approach_vec, obj_local_x)
             wps= [self.helper._build_pose(pos, grasp_quat) for pos in [p1_approach_pos, p2_grasp_pos]]
 
@@ -283,10 +306,14 @@ class SmartGraspNode(Node):
         self.get_logger().info("[Lying] Start operation...")
 
         # --- [Step 0] 설정 변수들 ---
-        PRE_GRASP_DIST = 0.25      # 접근 전 대기 거리 (m)
-        RETREAT_DIST = 0.25        # 후퇴 거리 (m)
+        PRE_GRASP_DIST = CFG["lying"]["pre_grasp_dist"]      # 접근 전 대기 거리 (m)
+        RETREAT_DIST = CFG["lying"]["retreat_dist"]          # 후퇴 거리 (m)
         # 층(Layer)을 형성하기 위한 오프셋 목록
-        inner_offsets = np.arange(0.0, 0.135, 0.001) 
+        inner_offsets = np.arange(
+            CFG["lying"]["inner_offset_start"],
+            CFG["lying"]["inner_offset_end"],
+            CFG["lying"]["inner_offset_step"],
+        )
 
         # --- [Step 1] 접근 벡터 후보군 계산 ---
         candidates = []
@@ -301,23 +328,24 @@ class SmartGraspNode(Node):
         else:
             plane_normal /= norm_val
 
-        for deg in range(0, 360, 5):
+        _min_angle = CFG["lying"]["min_approach_angle_deg"]
+        for deg in range(0, 360, CFG["lying"]["angle_sweep_step_deg"]):
             rad = np.deg2rad(deg)
 
             # [Case A] Roll 방식 접근 벡터
             v_local = np.array([0.0, np.cos(rad), np.sin(rad)], dtype=float)
             v_roll = rot_mat @ v_local
-            if v_roll[2] >= np.sin(np.deg2rad(25)): 
+            if v_roll[2] >= np.sin(np.deg2rad(_min_angle)): 
                 candidates.append((abs(v_roll[2]), v_roll, deg))
 
             # [Case B] Pitch 방식 접근 벡터
             rot_obj = R.from_rotvec(plane_normal * rad)
             v_pitch = rot_obj.apply(obj_axis_x)
-            if v_pitch[2] >= np.sin(np.deg2rad(25)):
+            if v_pitch[2] >= np.sin(np.deg2rad(_min_angle)):
                 candidates.append((abs(v_pitch[2]), v_pitch, deg + 1000))
 
-        # Z축 성분이 큰 순서(위에서 아래로 찍는 형태 선호)로 정렬
-        candidates.sort(key=lambda x: x[0], reverse=True)
+        # Z축 성분이 큰 순서(위에서 아래로 찍는 형태 선호)로 정렬 -> 일단 roll 방향 선호하게 변경
+        # candidates.sort(key=lambda x: x[0], reverse=True)
 
         # --- [Step 2] 실행 루프 ---
         for score, target_vec, deg in candidates:
@@ -335,7 +363,7 @@ class SmartGraspNode(Node):
                 wps = [self.helper._build_pose(pos, grasp_quat) for pos in [p1_pos, p2_pos]]
 
                 # 충돌 체크를 포함한 카르테시안 이동
-                if self.helper.move_cartesian(wps, collision=True, min_fraction=0.92):
+                if self.helper.move_cartesian(wps, collision=True, min_fraction=CFG["lying"]["approach_min_fraction"]):
                     self.get_logger().info(f"Approach Success! Deg: {deg}, Offset: {dist_val}")
                     
                     # [Phase 2] 그리핑
@@ -346,7 +374,7 @@ class SmartGraspNode(Node):
                     p3_pos = center_pos + (target_vec * RETREAT_DIST)
                     p3 = self.helper._build_pose(p3_pos, grasp_quat)
 
-                    if self.helper.move_cartesian([p3], collision=False, min_fraction=0.95):
+                    if self.helper.move_cartesian([p3], collision=False, min_fraction=CFG["lying"]["retreat_min_fraction"]):
                         self.get_logger().info("Retreat Success.")
                         return True
                     else:
@@ -362,12 +390,16 @@ class SmartGraspNode(Node):
 # =========================================================================
 # [4] Convey
 # =========================================================================
-    def handle_convey(self, convey_pos, grasp_quat=np.array([0.0,1.0,0.0,0.0])):
+    def handle_convey(self, convey_pos, grasp_quat=None):
+        if grasp_quat is None:
+            grasp_quat = np.array(CFG["convey_quat"], dtype=float)
         self.get_logger().info("[Convey] Strategy Start")
 
+        convey_pos[2]+=CFG["convey"]["lift_up"]
         if not self.helper.move_cartesian(convey_pos, grasp_quat,collision=False):
             return False
-
+        
+        convey_pos[2]-=CFG["convey"]["lower_down"]
         if not self.helper.move_cartesian(convey_pos, grasp_quat, collision=False):
             return False
         
@@ -385,8 +417,9 @@ class SmartGraspNode(Node):
             return
         goal = GripperCommand.Goal()
         goal.command.position = float(pos)
-        goal.command.max_effort = 100.0
+        goal.command.max_effort = CFG["gripper_max_effort"]
         self.gripper_ac.send_goal_async(goal)
+        self.last_status=pos
 
 
 def main():

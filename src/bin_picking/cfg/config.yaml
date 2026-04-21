@@ -1,0 +1,59 @@
+# =========================================================
+# Smart Grasp Node Configuration
+# =========================================================
+
+pose_offset: [0.01, 0.04, 0.0]   
+
+frames:
+  base_frame: "base_link"
+
+topics:
+  target_info: "/grasp_planner/target_info"
+  gripper_cmd: "/gripper_controller/gripper_cmd"
+  cartesian_path: "/compute_cartesian_path"
+  execute_trajectory: "/execute_trajectory"
+
+gripper:
+  open_pos: 0.05
+  close_pos: 0.00
+  max_effort: 100.0
+  wait_after_cmd: 0.3
+  wait_after_grasp: 0.8
+
+# 홈 포즈 (작업 시작 전 복귀 위치)
+home_joints:
+  joint_1: 0.1945
+  joint_2: 0.1722
+  joint_3: 1.6341
+  joint_4: 0.0021
+  joint_5: 1.3097
+  joint_6: -1.3113
+
+# 공통 파지 파라미터
+grasp:
+  pre_grasp_dist: 0.25   # 접근 전 대기 거리 (m)
+  retreat_dist: 0.25     # 후퇴 거리 (m)
+  offset_dist: 0.25      # Standing/Flipped 접근 오프셋
+  min_fraction_default: 0.95
+  min_fraction_lying: 0.92
+
+# Standing / Flipped 전용
+topdown:
+  approach_vec: [0.0, 0.0, 1.0]
+  bin_center: [0.0, 0.8]
+  bin_blend_ratio: 0.25      # obj_x + ratio * bin_vec
+  bin_side_shift: 0.01       # 재시도 시 bin 방향 측면 이동량
+
+# Lying 전용 (후보군 스윕)
+lying:
+  inner_offset_start: 0.0
+  inner_offset_end: 0.135
+  inner_offset_step: 0.01
+  angle_sweep_step_deg: 5
+  min_approach_angle_deg: 25   # 수평에 너무 가까운 접근 제외
+
+# 이송(Convey) 위치
+convey:
+  position: [0.5, 0.0, 0.3]
+  quaternion: [0.0, 1.0, 0.0, 0.0]   # [x, y, z, w]
+  wait_after: 0.4
