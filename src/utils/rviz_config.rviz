@@ -11,6 +11,7 @@ Panels:
         - /TF1
         - /TF1/Frames1
         - /PointCloud22
+        - /PointCloud23
       Splitter Ratio: 0.5
     Tree Height: 365
   - Class: rviz_common/Selection
@@ -343,6 +344,16 @@ Visualization Manager:
           Value: false
         obj_1:
           Value: true
+        obj_2:
+          Value: true
+        obj_3:
+          Value: true
+        obj_4:
+          Value: true
+        obj_5:
+          Value: true
+        obj_6:
+          Value: true
         robotiq_hande_coupler:
           Value: false
         robotiq_hande_end:
@@ -388,6 +399,16 @@ Visualization Manager:
                             robotiq_hande_right_finger:
                               {}
             obj_1:
+              {}
+            obj_2:
+              {}
+            obj_3:
+              {}
+            obj_4:
+              {}
+            obj_5:
+              {}
+            obj_6:
               {}
       Update Interval: 0
       Value: true
@@ -486,6 +507,40 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /binpicking/visibility_model_markers
       Value: true
+    - Alpha: 1
+      Autocompute Intensity Bounds: true
+      Autocompute Value Bounds:
+        Max Value: 10
+        Min Value: -10
+        Value: true
+      Axis: Z
+      Channel Name: intensity
+      Class: rviz_default_plugins/PointCloud2
+      Color: 255; 255; 255
+      Color Transformer: RGB8
+      Decay Time: 0
+      Enabled: true
+      Invert Rainbow: false
+      Max Color: 255; 255; 255
+      Max Intensity: 4096
+      Min Color: 0; 0; 0
+      Min Intensity: 0
+      Name: PointCloud2
+      Position Transformer: XYZ
+      Selectable: true
+      Size (Pixels): 2
+      Size (m): 0.009999999776482582
+      Style: Points
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        Filter size: 10
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /binpicking/highlighted_points
+      Use Fixed Frame: true
+      Use rainbow: true
+      Value: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -532,25 +587,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 1.3196523189544678
+      Distance: 1.1035627126693726
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0.7771491408348083
-        Y: 0.48092925548553467
-        Z: -0.3365855813026428
+        X: 0.8303734064102173
+        Y: 0.5170620083808899
+        Z: -0.2547036111354828
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7653986811637878
+      Pitch: 0.8303986191749573
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 4.495434761047363
+      Yaw: 4.450435638427734
     Saved: ~
 Window Geometry:
   Displays:

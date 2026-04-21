@@ -114,8 +114,8 @@ class PerceptionBridge(Node):
             T_world = self.T_base_camera @ T_cam
 
             new_pose = Pose()
-            new_pose.position.x, = T_world[:3, 3][0]
-            new_pose.position.y= T_world[:3, 3][1] +1.0
+            new_pose.position.x = T_world[:3, 3][0] + 0.01
+            new_pose.position.y= T_world[:3, 3][1] +0.04
             new_pose.position.z = T_world[:3, 3][2]
             q_world = Rotation.from_matrix(T_world[:3, :3]).as_quat()
             new_pose.orientation.x, new_pose.orientation.y, new_pose.orientation.z, new_pose.orientation.w = q_world
